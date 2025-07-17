@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Add TOTP</title>
+        <style>
+            textarea,
+            input,
+            select,
+            button {
+                display: block;
+                margin: 10px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Add TOTP</h2>
+
+        <form method="post" enctype="multipart/form-data" id="totp-form">
+            {% csrf_token %}
+
+            <!-- Textarea for direct otpauth URL -->
+            <label for="id_otp_url">Paste TOTP URL:</label>
+            <textarea
+                name="otp_url"
+                id="id_otp_url"
+                rows="3"
+                required
+            ></textarea>
+
+            <!-- Optional: QR code upload -->
+            <label for="qr-upload">Upload QR Code Image:</label>
+            <input type="file" id="qr-upload" accept="image/*" />
+
+            <!-- Optional: Use camera to scan QR -->
+            <button type="button" onclick="startCamera()">
+                Scan QR with Camera
+            </button>
+            <video
+                id="video"
+                width="300"
+                height="200"
+                autoplay
+                style="display: none"
+            ></video>
+            <canvas id="canvas" hidden></canvas>
+
+            <button type="submit">Add</button>
+        </form>
+
+        <!-- Include jsQR (QR reader) -->
+        <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
+        <script>
+            // Handle QR image upload
+            document
+                .getElementById("qr-upload")
+                .addEventListener("change", async function (e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const img = new Image();
+                    const reader = new FileReader();
+
+                    reader.onload = function (event) {
+                        img.onload = function () {
+                            const canvas = document.getElementById("canvas");
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext("2d");
+                            ctx.drawImage(img, 0, 0);
+
+                            const imageData = ctx.getImageData(
+                                0,
+                                0,
+                                canvas.width,
+                                canvas.height,
+                            );
+                            const code = jsQR(
+                                imageData.data,
+                                imageData.width,
+                                imageData.height,
+                            );
+                            console.log(code);
+                            if (code && code.data.startsWith("otpauth://")) {
+                                document.getElementById("id_otp_url").value =
+                                    code.data;
+                            } else {
+                                alert("No valid TOTP QR code found.");
+                            }
+                        };
+                        img.src = event.target.result;
+                    };
+
+                    reader.readAsDataURL(file);
+                });
+
+            // Handle camera-based QR scan
+            function startCamera() {
+                const video = document.getElementById("video");
+                const canvas = document.getElementById("canvas");
+                const ctx = canvas.getContext("2d");
+                video.style.display = "block";
+
+                navigator.mediaDevices
+                    .getUserMedia({ video: { facingMode: "environment" } })
+                    .then((stream) => {
+                        video.srcObject = stream;
+                        video.play();
+
+                        const scan = () => {
+                            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                                canvas.width = video.videoWidth;
+                                canvas.height = video.videoHeight;
+                                ctx.drawImage(video, 0, 0);
+                                const imageData = ctx.getImageData(
+                                    0,
+                                    0,
+                                    canvas.width,
+                                    canvas.height,
+                                );
+                                const code = jsQR(
+                                    imageData.data,
+                                    canvas.width,
+                                    canvas.height,
+                                );
+
+                                if (
+                                    code &&
+                                    code.data.startsWith("otpauth://")
+                                ) {
+                                    document.getElementById(
+                                        "id_otp_url",
+                                    ).value = code.data;
+                                    stream
+                                        .getTracks()
+                                        .forEach((track) => track.stop());
+                                    video.style.display = "none";
+                                    alert("TOTP URL extracted from QR.");
+                                }
+                            }
+                            requestAnimationFrame(scan);
+                        };
+
+                        requestAnimationFrame(scan);
+                    })
+                    .catch((err) => alert("Camera error: " + err));
+            }
+        </script>
+    </body>
+</html>

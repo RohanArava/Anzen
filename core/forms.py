@@ -17,3 +17,13 @@ class SignUpForm(forms.ModelForm):
         if pwd and confirm and pwd != confirm:
             raise ValidationError("Passwords do not match.")
         return cleaned_data
+
+class TOTPURLForm(forms.Form):
+    otp_url = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3}),
+        label="TOTP URL",
+        help_text="Paste the otpauth:// URL here (from QR or manual setup)"
+    )
+
+class UnlockForm(forms.Form):
+    password = forms.CharField(widget=forms.PasswordInput, label="Your password")

@@ -1,0 +1,58 @@
+<div id="totp-list"></div>
+<form method="post" action="/logout/" style="float: right; margin-bottom: 1em">
+    {% csrf_token %}
+    <button type="submit">Logout</button>
+</form>
+<script>
+    let currentTotps = [];
+
+    async function loadTotps() {
+        const response = await fetch("/totps/");
+        if (response.status === 401) {
+            window.location.href = "/unlock?next=/totps-ui/";
+            return;
+        }
+        const data = await response.json();
+        const now = Math.floor(Date.now() / 1000);
+
+        currentTotps = data.map((t) => ({
+            ...t,
+            secondsLeft: t.refreshes_at - now,
+        }));
+
+        renderTotps();
+
+        const minRefreshAt = Math.min(
+            ...currentTotps.map((t) => t.refreshes_at),
+        );
+        const delay = (minRefreshAt - now) * 1000;
+        setTimeout(loadTotps, delay);
+    }
+
+    function renderTotps() {
+        const container = document.getElementById("totp-list");
+        container.innerHTML = "";
+        for (const t of currentTotps) {
+            const div = document.createElement("div");
+            div.innerHTML = `
+                <strong>${t.issuer}</strong> (${t.account_name}):
+                ${t.otp || "?"}
+                <small class="timer">(${t.secondsLeft}s left)</small>
+            `;
+            container.appendChild(div);
+        }
+    }
+
+    // Countdown updater (every 1 second)
+    setInterval(() => {
+        for (const t of currentTotps) {
+            if (t.secondsLeft > 0) t.secondsLeft -= 1;
+        }
+        const timers = document.querySelectorAll(".timer");
+        timers.forEach((el, idx) => {
+            el.textContent = `(${currentTotps[idx].secondsLeft}s left)`;
+        });
+    }, 1000);
+
+    loadTotps();
+</script>
